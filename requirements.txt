@@ -1,9 +1,4 @@
 pandas
 requests
 joblib
-hmac
-hashlib
-time
-websocket
-json
-math
+websocket-client
