@@ -7,6 +7,7 @@ import time
 import websocket
 import json
 import math
+import os
 
 # PRICES
 
@@ -335,8 +336,8 @@ def on_open(ws):
     ws.send(json.dumps(subscribe_message))
 
 if __name__ == "__main__":
-    API_KEY = 'MM0XlzXtyM7f9XzBlYD5TDZChdGlxixWn3FetCl3zrXN6joLx2Ub1ohUxIBDQmCU'
-    SECRET_KEY = 'yHkGPEr21KoI4QDyQW1MHlX7HysVw6C5ZpggZGCFxAveT7v09NkxT5qJj0Ygj4m0'
+    API_KEY = os.environ.get('API_KEY')
+    SECRET_KEY = os.environ.get('SECRET_KEY')
     
     BASE_URL = 'https://fapi.binance.com'
 
