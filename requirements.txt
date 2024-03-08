@@ -2,3 +2,4 @@ pandas
 requests
 joblib
 websocket-client
+lightgbm
