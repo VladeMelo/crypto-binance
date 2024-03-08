@@ -377,9 +377,11 @@ if __name__ == "__main__":
 
     last_signal = '-'
 
-    ws = websocket.WebSocketApp(websocket_url,
-                                on_message=on_message,
-                                on_error=on_error,
-                                on_close=on_close)
-    ws.on_open = on_open
-    ws.run_forever()
+    # ws = websocket.WebSocketApp(websocket_url,
+    #                             on_message=on_message,
+    #                             on_error=on_error,
+    #                             on_close=on_close)
+    # ws.on_open = on_open
+    # ws.run_forever()
+
+    run_logic()
