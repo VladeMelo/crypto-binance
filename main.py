@@ -7,7 +7,6 @@ import time
 import websocket
 import json
 import math
-import os
 
 # PRICES
 
@@ -210,38 +209,6 @@ def get_crypto_quantity(symbol, leverage):
 
     return int(crypto_quantity)
 
-# SELL
-
-# def get_open_position_amount(symbol):
-#   url = f"{BASE_URL}/fapi/v2/positionRisk"
-
-#   params = {'timestamp': get_timestamp(), 'symbol': symbol}
-
-#   query_string = '&'.join([f"{k}={v}" for k, v in params.items()])
-#   signature = create_signature(query_string)
-
-#   response = requests.get(url + '?' + query_string + '&signature=' + signature, headers=headers())
-#   positions = response.json()
-
-#   for position in positions:
-#     if position['symbol'] == symbol:
-#       positionAmt = float(position['positionAmt'])
-
-#       return positionAmt
-
-#   return 0
-
-# def sell_position(symbol):
-#   position_amount = get_open_position_amount(symbol)
-  
-#   if position_amount > 0:
-#     print(f"Vendendo toda a posicao de {symbol}, Quantidade: {position_amount}")
-
-#     # Coloque uma ordem de venda ao mercado para toda a posição
-#     place_order(symbol, 'SELL', 'MARKET', abs(position_amount))
-#   else:
-#     print(f"Nao existe posicao aberta para {symbol} para vender.")
-
 # LOGIC
     
 def run_logic():
@@ -377,11 +344,11 @@ if __name__ == "__main__":
 
     last_signal = '-'
 
-    # ws = websocket.WebSocketApp(websocket_url,
-    #                             on_message=on_message,
-    #                             on_error=on_error,
-    #                             on_close=on_close)
-    # ws.on_open = on_open
-    # ws.run_forever()
+    ws = websocket.WebSocketApp(websocket_url,
+                                on_message=on_message,
+                                on_error=on_error,
+                                on_close=on_close)
+    ws.on_open = on_open
+    ws.run_forever()
 
-    run_logic()
+    print('Começou o programa!')
