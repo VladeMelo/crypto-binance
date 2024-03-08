@@ -137,10 +137,14 @@ def check_open_positions(symbol):
 
     # Considera posição aberta se a quantidade é maior que zero
     for position in positions:
-        if float(position['positionAmt']) != 0.0:
-            return True
+        positionAmt = float(position['positionAmt'])
+
+        if positionAmt != 0.0:
+            positionType = 'Long' if positionAmt > 0 else 'Short'
+
+            return (positionType, abs(positionAmt))
     
-    return False
+    return (None, 0)
 
 def get_tick_size(symbol):
     url = f"{BASE_URL}/fapi/v1/exchangeInfo"
@@ -197,37 +201,46 @@ def place_order(symbol, side, type, quantity):
 
     return response.json()
 
+def get_crypto_quantity(symbol, leverage):
+    tick_size = get_tick_size(symbol)  # Obtém o tickSize para o par
+    crypto_price = get_market_price(symbol)  # Obtem o preço atual de mercado
+    usdt_balance = get_balance()  # Obtém o saldo disponível
+    crypto_quantity = (usdt_balance / crypto_price) * leverage - 1   # Calcula a quantidade baseada no saldo e preço
+    crypto_quantity = adjust_value(crypto_quantity, tick_size)  # Ajusta a quantidade baseada no tickSize
+
+    return int(crypto_quantity)
+
 # SELL
 
-def get_open_position_amount(symbol):
-  url = f"{BASE_URL}/fapi/v2/positionRisk"
+# def get_open_position_amount(symbol):
+#   url = f"{BASE_URL}/fapi/v2/positionRisk"
 
-  params = {'timestamp': get_timestamp(), 'symbol': symbol}
+#   params = {'timestamp': get_timestamp(), 'symbol': symbol}
 
-  query_string = '&'.join([f"{k}={v}" for k, v in params.items()])
-  signature = create_signature(query_string)
+#   query_string = '&'.join([f"{k}={v}" for k, v in params.items()])
+#   signature = create_signature(query_string)
 
-  response = requests.get(url + '?' + query_string + '&signature=' + signature, headers=headers())
-  positions = response.json()
+#   response = requests.get(url + '?' + query_string + '&signature=' + signature, headers=headers())
+#   positions = response.json()
 
-  for position in positions:
-    if position['symbol'] == symbol:
-      positionAmt = float(position['positionAmt'])
+#   for position in positions:
+#     if position['symbol'] == symbol:
+#       positionAmt = float(position['positionAmt'])
 
-      return positionAmt
+#       return positionAmt
 
-  return 0
+#   return 0
 
-def sell_position(symbol):
-  position_amount = get_open_position_amount(symbol)
+# def sell_position(symbol):
+#   position_amount = get_open_position_amount(symbol)
   
-  if position_amount > 0:
-    print(f"Vendendo toda a posicao de {symbol}, Quantidade: {position_amount}")
+#   if position_amount > 0:
+#     print(f"Vendendo toda a posicao de {symbol}, Quantidade: {position_amount}")
 
-    # Coloque uma ordem de venda ao mercado para toda a posição
-    place_order(symbol, 'SELL', 'MARKET', abs(position_amount))
-  else:
-    print(f"Nao existe posicao aberta para {symbol} para vender.")
+#     # Coloque uma ordem de venda ao mercado para toda a posição
+#     place_order(symbol, 'SELL', 'MARKET', abs(position_amount))
+#   else:
+#     print(f"Nao existe posicao aberta para {symbol} para vender.")
 
 # LOGIC
     
@@ -274,32 +287,49 @@ def run_logic():
     print('Ultimo sinal: {} / Sinal atual: {}'.format(last_signal, signal))
 
     if last_signal != signal:
-        if signal == 1:
-            if not check_open_positions(symbol):
-                print("Ordem de compra iniciada")
+        position_status, position_amount = check_open_positions(symbol)
 
-                leverage = 2  # Define a alavancagem desejada
+        if signal == 1:
+            if position_status != 'Long':
+                if position_status == 'Short':
+                    place_order(symbol, 'BUY', 'MARKET', position_amount) # sai da posição short
+
+                    print('Sai da posicao Short')
+                    time.sleep(2) # para garantir que a ordem foi executada
+
+                leverage = 4  # Define a alavancagem desejada
                 set_leverage(symbol, leverage)  # Define a alavancagem para o par 
 
-                tick_size = get_tick_size(symbol)  # Obtém o tickSize para o par
-                ada_price = get_market_price(symbol)  # Obtem o preço atual de mercado
-                usdt_balance = get_balance()  # Obtém o saldo disponível
-                ada_quantity = (usdt_balance / ada_price) * leverage - 1   # Calcula a quantidade baseada no saldo e preço
-                ada_quantity = adjust_value(ada_quantity, tick_size)  # Ajusta a quantidade baseada no tickSize
+                crypto_quantity = get_crypto_quantity(symbol, leverage)
 
-                print('ADA Price:', ada_price)
-                print('USDT Balance:', usdt_balance)
-                print('ADA To Buy:', int(ada_quantity))
+                print("Ordem de Long iniciada")
 
                 # Faz a ordem de compra
-                order_response = place_order(symbol, 'BUY', 'MARKET', int(ada_quantity))
-                print("Ordem de compra enviada:", order_response)
+                order_response = place_order(symbol, 'BUY', 'MARKET', crypto_quantity) # entra na posição long
+                print("Ordem de Long enviada:", order_response)
             else:
-                print("Voce ja tem uma posicao aberta.")
+                print("Voce ja tem uma posicao Long aberta.")
         else:
-            print("Vender posicao")
-            sell_position(symbol)
+            if position_status != 'Short':
+                if position_status == 'Long':
+                    place_order(symbol, 'SELL', 'MARKET', position_amount)
 
+                    print('Sai da posicao Long')
+                    time.sleep(2)
+
+                leverage = 4
+                set_leverage(symbol, leverage)
+
+                crypto_quantity = get_crypto_quantity(symbol, leverage)
+
+                print("Ordem de Short iniciada")
+
+                order_response = place_order(symbol, 'SELL', 'MARKET', crypto_quantity)
+                print("Ordem de Short enviada:", order_response)
+            else:
+                print("Voce ja tem uma posicao Short aberta.")
+
+    print('-----------------------------------')
     last_signal = signal
 
 # SOCKET
@@ -336,14 +366,16 @@ def on_open(ws):
     ws.send(json.dumps(subscribe_message))
 
 if __name__ == "__main__":
-    API_KEY = os.environ.get('API_KEY')
-    SECRET_KEY = os.environ.get('SECRET_KEY')
+    # API_KEY = os.environ.get('API_KEY')
+    # SECRET_KEY = os.environ.get('SECRET_KEY')
+    API_KEY = 'MM0XlzXtyM7f9XzBlYD5TDZChdGlxixWn3FetCl3zrXN6joLx2Ub1ohUxIBDQmCU'
+    SECRET_KEY = 'yHkGPEr21KoI4QDyQW1MHlX7HysVw6C5ZpggZGCFxAveT7v09NkxT5qJj0Ygj4m0'
     
     BASE_URL = 'https://fapi.binance.com'
 
     websocket_url = "wss://stream.binance.com:9443/ws/adausdt@kline_1h"
 
-    last_signal = 0
+    last_signal = '-'
 
     ws = websocket.WebSocketApp(websocket_url,
                                 on_message=on_message,
