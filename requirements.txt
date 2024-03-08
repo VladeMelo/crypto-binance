@@ -3,3 +3,4 @@ requests
 joblib
 websocket-client
 lightgbm
+sklearn
