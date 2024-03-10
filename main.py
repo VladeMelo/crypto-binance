@@ -205,7 +205,7 @@ def get_crypto_quantity(symbol, leverage):
     tick_size = get_tick_size(symbol)  # Obtém o tickSize para o par
     crypto_price = get_market_price(symbol)  # Obtem o preço atual de mercado
     usdt_balance = get_balance()  # Obtém o saldo disponível
-    crypto_quantity = (usdt_balance / crypto_price) * leverage - 1   # Calcula a quantidade baseada no saldo e preço
+    crypto_quantity = ((usdt_balance / crypto_price) - 1) * leverage   # Calcula a quantidade baseada no saldo e preço
     crypto_quantity = adjust_value(crypto_quantity, tick_size)  # Ajusta a quantidade baseada no tickSize
 
     return int(crypto_quantity)
