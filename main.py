@@ -283,7 +283,7 @@ def run_logic():
                 print('Sai da posicao Long')
                 time.sleep(10)
 
-            leverage = 4
+            leverage = 2
             set_leverage(symbol, leverage)
 
             crypto_quantity = get_crypto_quantity(symbol, leverage)
