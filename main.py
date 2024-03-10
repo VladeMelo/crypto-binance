@@ -250,55 +250,50 @@ def run_logic():
     df_reorganized = df[columns_in_order].tail(1)
 
     signal = (model.predict_proba(df_reorganized)[:, 1] >= 0.4).astype(int)[0]
-    global last_signal
 
-    print('Ultimo sinal: {} / Sinal atual: {}'.format(last_signal, signal))
+    print('Sinal: {}'.format(signal))
 
-    if last_signal != signal:
-        position_status, position_amount = check_open_positions(symbol)
+    position_status, position_amount = check_open_positions(symbol)
 
-        if signal == 1:
-            if position_status != 'Long':
-                if position_status == 'Short':
-                    place_order(symbol, 'BUY', 'MARKET', position_amount) # sai da posição short
+    if signal == 1:
+        if position_status != 'Long':
+            if position_status == 'Short':
+                place_order(symbol, 'BUY', 'MARKET', position_amount) # sai da posição short
 
-                    print('Sai da posicao Short')
-                    time.sleep(2) # para garantir que a ordem foi executada
+                print('Sai da posicao Short')
+                time.sleep(10) # para garantir que a ordem foi executada
 
-                leverage = 4  # Define a alavancagem desejada
-                set_leverage(symbol, leverage)  # Define a alavancagem para o par 
+            leverage = 4  # Define a alavancagem desejada
+            set_leverage(symbol, leverage)  # Define a alavancagem para o par 
 
-                crypto_quantity = get_crypto_quantity(symbol, leverage)
+            crypto_quantity = get_crypto_quantity(symbol, leverage)
 
-                print("Ordem de Long iniciada")
+            print("Ordem de Long iniciada")
 
                 # Faz a ordem de compra
-                order_response = place_order(symbol, 'BUY', 'MARKET', crypto_quantity) # entra na posição long
-                print("Ordem de Long enviada:", order_response)
-            else:
-                print("Voce ja tem uma posicao Long aberta.")
+            order_response = place_order(symbol, 'BUY', 'MARKET', crypto_quantity) # entra na posição long
+            print("Ordem de Long enviada:", order_response)
         else:
-            if position_status != 'Short':
-                if position_status == 'Long':
-                    place_order(symbol, 'SELL', 'MARKET', position_amount)
+            print("Voce ja tem uma posicao Long aberta.")
+    else:
+        if position_status != 'Short':
+            if position_status == 'Long':
+                place_order(symbol, 'SELL', 'MARKET', position_amount)
 
-                    print('Sai da posicao Long')
-                    time.sleep(2)
+                print('Sai da posicao Long')
+                time.sleep(10)
 
-                leverage = 4
-                set_leverage(symbol, leverage)
+            leverage = 4
+            set_leverage(symbol, leverage)
 
-                crypto_quantity = get_crypto_quantity(symbol, leverage)
+            crypto_quantity = get_crypto_quantity(symbol, leverage)
 
-                print("Ordem de Short iniciada")
+            print("Ordem de Short iniciada")
 
-                order_response = place_order(symbol, 'SELL', 'MARKET', crypto_quantity)
-                print("Ordem de Short enviada:", order_response)
-            else:
-                print("Voce ja tem uma posicao Short aberta.")
-
-    print('-----------------------------------')
-    last_signal = signal
+            order_response = place_order(symbol, 'SELL', 'MARKET', crypto_quantity)
+            print("Ordem de Short enviada:", order_response)
+        else:
+            print("Voce ja tem uma posicao Short aberta.")
 
 # SOCKET
     
@@ -340,8 +335,6 @@ if __name__ == "__main__":
     BASE_URL = 'https://fapi.binance.com'
 
     websocket_url = "wss://stream.binance.com:9443/ws/adausdt@kline_1h"
-
-    last_signal = '-'
 
     ws = websocket.WebSocketApp(websocket_url,
                                 on_message=on_message,
