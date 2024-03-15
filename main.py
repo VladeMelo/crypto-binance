@@ -18,7 +18,7 @@ def get_last_info(symbol, limit):
     # Parâmetros para a requisição: par de moedas, intervalo de tempo e limite de dados
     params = {
         'symbol': symbol,
-        'interval': '1h',
+        'interval': '15m',
         'limit': limit  # Número de candlesticks retornados
     }
 
@@ -49,14 +49,6 @@ def RSI(df, periods=15):
 
   return rsi
 
-def MACD(df, short_window=12, long_window=26):
-  ema_fast = df['Close'].ewm(span=short_window, adjust=False).mean()
-  ema_slow = df['Close'].ewm(span=long_window, adjust=False).mean()
-
-  macd = ema_fast - ema_slow
-
-  return macd
-
 def Williams(df, periods):
   highest_high = df['High'].rolling(window=periods).max()
   lowest_low = df['Low'].rolling(window=periods).min()
@@ -86,7 +78,25 @@ def MoneyFlowIndex(df, period=14):
 
   mfi = 100 - (100 / (1 + money_flow_Ratio))
 
-  return money_flow, negative_flow, mfi
+  return mfi
+
+def calculate_EMA(df, span):
+  return df.ewm(span=span, adjust=False).mean()
+
+def relative_difference(series1, series2):
+  return (series1 - series2) / series2
+
+def EMA5_20(df):
+    return relative_difference(calculate_EMA(df['Close'], 5), calculate_EMA(df['Close'], 20))
+
+def CMO(df, periods=14):
+    diff = df['Close'] - df['Close'].shift(1)
+    up = diff.where(diff > 0, 0)
+    down = abs(diff.where(diff < 0, 0))
+    sum_up = up.rolling(window=periods).sum()
+    sum_down = down.rolling(window=periods).sum()
+
+    return ((sum_up - sum_down) / (sum_up + sum_down)) * 100
 
 # BUY
 
@@ -161,9 +171,9 @@ def get_tick_size(symbol):
     return None
 
 def adjust_value(value, tick_size):
-    precision = int(round(-math.log(tick_size, 10), 0))
-
-    return round(value, precision)
+    precision = int(-math.log10(tick_size))
+    scale = 10 ** precision
+    return math.floor(value * scale) / scale
 
 def set_leverage(symbol, leverage):
     url = f"{BASE_URL}/fapi/v1/leverage"
@@ -205,15 +215,15 @@ def get_crypto_quantity(symbol, leverage):
     tick_size = get_tick_size(symbol)  # Obtém o tickSize para o par
     crypto_price = get_market_price(symbol)  # Obtem o preço atual de mercado
     usdt_balance = get_balance()  # Obtém o saldo disponível
-    crypto_quantity = ((usdt_balance / crypto_price) - 1) * leverage   # Calcula a quantidade baseada no saldo e preço
-    crypto_quantity = adjust_value(crypto_quantity, tick_size)  # Ajusta a quantidade baseada no tickSize
+    crypto_quantity = (usdt_balance / crypto_price) * leverage   # Calcula a quantidade baseada no saldo e preço
+    crypto_quantity = adjust_value(crypto_quantity * 0.97, tick_size)  # Ajusta a quantidade baseada no tickSize
 
-    return int(crypto_quantity)
+    return crypto_quantity
 
 # LOGIC
     
 def run_logic():
-    symbol = 'ADAUSDT'
+    symbol = 'ETHUSDT'
 
     model = joblib.load('model.pkl')
 
@@ -240,16 +250,18 @@ def run_logic():
     df = pd.DataFrame(data)
 
     df['RSI'] = RSI(df)
-    df['MACD'] = MACD(df)
     df['Williams_%R'] = Williams(df, periods=15)
     df['%K'], df['%D'] = StochasticOscillator(df)
-    df['Money_Flow'], df['Negative_Flow'], df['MFI'] = MoneyFlowIndex(df)
+    df['MFI'] = MoneyFlowIndex(df)
+    df['EMA5-20'] = EMA5_20(df)
+    df['AO14'] = Williams(df, periods=14)
+    df['CMO'] = CMO(df)
 
-    columns_in_order = ['Volume_Crypto', 'Volume_USDT', 'Trade_Count', 'RSI', 'MACD', 'Williams_%R','%K', '%D', 'Money_Flow', 'Negative_Flow', 'MFI']
+    columns_in_order = ['RSI', 'Williams_%R', '%K', '%D', 'MFI', 'EMA5-20', 'AO14', 'CMO']
 
     df_reorganized = df[columns_in_order].tail(1)
 
-    signal = (model.predict_proba(df_reorganized)[:, 1] >= 0.4).astype(int)[0]
+    signal = (model.predict_proba(df_reorganized)[:, 1] >= 0.6).astype(int)[0]
 
     print('Sinal: {}'.format(signal))
 
@@ -263,7 +275,7 @@ def run_logic():
                 print('Sai da posicao Short')
                 time.sleep(10) # para garantir que a ordem foi executada
 
-            leverage = 4  # Define a alavancagem desejada
+            leverage = 50  # Define a alavancagem desejada
             set_leverage(symbol, leverage)  # Define a alavancagem para o par 
 
             crypto_quantity = get_crypto_quantity(symbol, leverage)
@@ -283,7 +295,7 @@ def run_logic():
                 print('Sai da posicao Long')
                 time.sleep(10)
 
-            leverage = 2
+            leverage = 10
             set_leverage(symbol, leverage)
 
             crypto_quantity = get_crypto_quantity(symbol, leverage)
@@ -306,7 +318,7 @@ def on_message(ws, message):
     is_candle_closed = kline['x']
 
     if is_candle_closed:
-      print("Vela de 1 hora fechada.")
+      print("Vela de 15 min fechada.")
 
       run_logic()
 
@@ -322,7 +334,7 @@ def on_open(ws):
     subscribe_message = {
         "method": "SUBSCRIBE",
         "params": [
-            "adausdt@kline_1h"
+            "ethusdt@kline_15m"
         ],
         "id": 1
     }
@@ -334,7 +346,7 @@ if __name__ == "__main__":
     
     BASE_URL = 'https://fapi.binance.com'
 
-    websocket_url = "wss://stream.binance.com:9443/ws/adausdt@kline_1h"
+    websocket_url = "wss://stream.binance.com:9443/ws/ethusdt@kline_15m"
 
     ws = websocket.WebSocketApp(websocket_url,
                                 on_message=on_message,
