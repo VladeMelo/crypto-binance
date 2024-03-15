@@ -257,11 +257,11 @@ def run_logic():
     df['AO14'] = Williams(df, periods=14)
     df['CMO'] = CMO(df)
 
-    columns_in_order = ['RSI', 'Williams_%R', '%K', '%D', 'MFI', 'EMA5-20', 'AO14', 'CMO']
+    columns_in_order = ['Williams_%R', '%K', '%D', 'AO14', 'CMO']
 
     df_reorganized = df[columns_in_order].tail(1)
 
-    signal = (model.predict_proba(df_reorganized)[:, 1] >= 0.6).astype(int)[0]
+    signal = (model.predict_proba(df_reorganized)[:, 1] >= 0.4).astype(int)[0]
 
     print('Sinal: {}'.format(signal))
 
@@ -275,7 +275,7 @@ def run_logic():
                 print('Sai da posicao Short')
                 time.sleep(10) # para garantir que a ordem foi executada
 
-            leverage = 50  # Define a alavancagem desejada
+            leverage = 8  # Define a alavancagem desejada
             set_leverage(symbol, leverage)  # Define a alavancagem para o par 
 
             crypto_quantity = get_crypto_quantity(symbol, leverage)
