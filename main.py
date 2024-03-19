@@ -257,11 +257,11 @@ def run_logic():
     df['AO14'] = Williams(df, periods=14)
     df['CMO'] = CMO(df)
 
-    columns_in_order = ['Williams_%R', '%K', '%D', 'AO14', 'CMO']
+    columns_in_order = ['Williams_%R']
 
     df_reorganized = df[columns_in_order].tail(1)
 
-    signal = (model.predict_proba(df_reorganized)[:, 1] >= 0.4).astype(int)[0]
+    signal = (model.predict_proba(df_reorganized)[:, 1] >= 0.45).astype(int)[0]
 
     print('Sinal: {}'.format(signal))
 
@@ -295,7 +295,7 @@ def run_logic():
                 print('Sai da posicao Long')
                 time.sleep(10)
 
-            leverage = 10
+            leverage = 3
             set_leverage(symbol, leverage)
 
             crypto_quantity = get_crypto_quantity(symbol, leverage)
