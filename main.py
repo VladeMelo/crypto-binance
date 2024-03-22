@@ -8,6 +8,8 @@ import websocket
 import json
 import math
 import os
+import numpy as np
+import datetime
 
 # PRICES
 
@@ -33,6 +35,14 @@ def get_last_info(symbol, limit):
     return response.json()
 
 # INDICATORS
+
+def ATR(df, periods=14):
+    df['High_Low'] = df['High'] - df['Low']
+    df['High_Close'] = abs(df['High'] - df['Close'].shift())
+    df['Low_Close'] = abs(df['Low'] - df['Close'].shift())
+    df['TR'] = df[['High_Low', 'High_Close', 'Low_Close']].max(axis=1)
+
+    return df['TR'].rolling(window=periods).mean()
 
 def RSI(df, periods=15):
   close_percentual_variation = df['Close'] / df['Close'].shift(1) - 1
@@ -88,6 +98,16 @@ def relative_difference(series1, series2):
 
 def EMA5_20(df):
     return relative_difference(calculate_EMA(df['Close'], 5), calculate_EMA(df['Close'], 20))
+
+def ADX(df, periods=14):
+    df['DMplus'] = np.where((df['High'] - df['High'].shift(1)) > (df['Low'].shift(1) - df['Low']), 
+                            df['High'] - df['High'].shift(1), 0)
+    df['DMminus'] = np.where((df['Low'].shift(1) - df['Low']) > (df['High'] - df['High'].shift(1)), 
+                             df['Low'].shift(1) - df['Low'], 0)
+    atr = ATR(df, periods)
+    adx = (abs(df['DMplus'] - df['DMminus']) / (df['DMplus'] + df['DMminus'])).rolling(window=periods).mean()
+    
+    return (adx / atr) * 100
 
 def CMO(df, periods=14):
     diff = df['Close'] - df['Close'].shift(1)
@@ -193,6 +213,27 @@ def set_leverage(symbol, leverage):
 
     return response.json()
 
+def get_current_leverage(symbol):
+    url = f"{BASE_URL}/fapi/v1/positionRisk"
+
+    params = {
+        'symbol': symbol,
+        'timestamp': get_timestamp()
+    }
+
+    query_string = '&'.join([f"{k}={v}" for k, v in params.items()])
+    signature = create_signature(query_string)
+
+    final_url = f"{url}?{query_string}&signature={signature}"
+
+    response = requests.get(final_url, headers=headers())
+
+    # Assuming the response includes a list of positions and you need the one matching your symbol
+    positions = response.json()
+    for position in positions:
+        if position['symbol'] == symbol:
+            return int(position['leverage'])
+
 def place_order(symbol, side, type, quantity):
     url = f"{BASE_URL}/fapi/v1/order"
 
@@ -227,8 +268,9 @@ def run_logic():
 
     model = joblib.load('model.pkl')
 
-    info = get_last_info(symbol, 26)
+    info = get_last_info(symbol, 4 * 48)
 
+    open_time = list(map(lambda x: float(x[0]), data))
     open = list(map(lambda x: float(x[1]), info))
     high = list(map(lambda x: float(x[2]), info))
     low = list(map(lambda x: float(x[3]), info))
@@ -238,6 +280,7 @@ def run_logic():
     trade_count = list(map(lambda x: x[8], info))
 
     data = {
+        'Open_Time': open_time,
         'Open': open,
         'Close': close,
         'Low': low,
@@ -249,63 +292,77 @@ def run_logic():
 
     df = pd.DataFrame(data)
 
+    df['Open_Time'] = df['Open_Time'].apply(lambda x: datetime.datetime.utcfromtimestamp(x / 1000).strftime('%H:%M'))
+
+    df['Expected Return'] = df['Close'].shift(-1) / df['Close'] - 1
+    df['Volatility'] = df['Expected Return'].shift(1).rolling(window=24).std() * np.sqrt(4 * 24 * 7)
+
+    df['ATR'] = ATR(df.copy())
     df['RSI'] = RSI(df)
     df['Williams_%R'] = Williams(df, periods=15)
     df['%K'], df['%D'] = StochasticOscillator(df)
     df['MFI'] = MoneyFlowIndex(df)
     df['EMA5-20'] = EMA5_20(df)
     df['AO14'] = Williams(df, periods=14)
+    df['ADX'] = ADX(df.copy())
     df['CMO'] = CMO(df)
 
-    columns_in_order = ['Williams_%R']
+    columns_in_order = ['Volume_Crypto', 'Volume_USDT', 'ATR', 'Williams_%R', '%K', '%D', 'AO14', 'ADX', 'CMO']
 
     df_reorganized = df[columns_in_order].tail(1)
 
-    signal = (model.predict_proba(df_reorganized)[:, 1] >= 0.45).astype(int)[0]
+    signal = model.predict(df_reorganized)
 
     print('Sinal: {}'.format(signal))
 
     position_status, position_amount = check_open_positions(symbol)
 
     if signal == 1:
-        if position_status != 'Long':
-            if position_status == 'Short':
-                place_order(symbol, 'BUY', 'MARKET', position_amount) # sai da posição short
+        row = df[df['Open_Time'] == '06:00'].iloc[1, :] # pega o penultimo 6 horas
+        lower_band_1std = row["Close"] - row["Volatility"] * row["Close"]
 
-                print('Sai da posicao Short')
-                time.sleep(10) # para garantir que a ordem foi executada
+        if position_status != 'Long': # estava fora do mercado
+            if row['Close'] < lower_band_1std:
+                leverage = 30
+            else:
+                leverage = 3
 
-            leverage = 8  # Define a alavancagem desejada
-            set_leverage(symbol, leverage)  # Define a alavancagem para o par 
-
-            crypto_quantity = get_crypto_quantity(symbol, leverage)
-
-            print("Ordem de Long iniciada")
-
-                # Faz a ordem de compra
-            order_response = place_order(symbol, 'BUY', 'MARKET', crypto_quantity) # entra na posição long
-            print("Ordem de Long enviada:", order_response)
-        else:
-            print("Voce ja tem uma posicao Long aberta.")
-    else:
-        if position_status != 'Short':
-            if position_status == 'Long':
-                place_order(symbol, 'SELL', 'MARKET', position_amount)
-
-                print('Sai da posicao Long')
-                time.sleep(10)
-
-            leverage = 3
             set_leverage(symbol, leverage)
 
             crypto_quantity = get_crypto_quantity(symbol, leverage)
 
-            print("Ordem de Short iniciada")
+            place_order(symbol, 'BUY', 'MARKET', crypto_quantity)
+        else: # ja esta dentro, sendo long ou long std
+            position = 'Long' if get_current_leverage(symbol) == 3 else 'Long STD'
 
-            order_response = place_order(symbol, 'SELL', 'MARKET', crypto_quantity)
-            print("Ordem de Short enviada:", order_response)
-        else:
-            print("Voce ja tem uma posicao Short aberta.")
+            if position == 'Long' and row['Close'] < lower_band_1std:
+                place_order(symbol, 'SELL', 'MARKET', position_amount)
+
+                time.sleep(10)
+
+                leverage = 30
+                set_leverage(symbol, leverage)
+
+                crypto_quantity = get_crypto_quantity(symbol, leverage)
+
+                place_order(symbol, 'BUY', 'MARKET', crypto_quantity)
+            elif position == 'Long STD' and row['Close'] >= lower_band_1std:
+                place_order(symbol, 'SELL', 'MARKET', position_amount)
+
+                time.sleep(10)
+
+                leverage = 3
+                set_leverage(symbol, leverage)
+
+                crypto_quantity = get_crypto_quantity(symbol, leverage)
+
+                place_order(symbol, 'BUY', 'MARKET', crypto_quantity)
+                
+    elif signal == -1:
+        if position_status == 'Long':
+            place_order(symbol, 'SELL', 'MARKET', position_amount)
+
+            time.sleep(10)
 
 # SOCKET
     
