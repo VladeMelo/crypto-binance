@@ -214,7 +214,7 @@ def set_leverage(symbol, leverage):
     return response.json()
 
 def get_current_leverage(symbol):
-    url = f"{BASE_URL}/fapi/v1/positionRisk"
+    url = f"{BASE_URL}/fapi/v2/positionRisk"
 
     params = {
         'symbol': symbol,
@@ -270,7 +270,7 @@ def run_logic():
 
     info = get_last_info(symbol, 4 * 48)
 
-    open_time = list(map(lambda x: float(x[0]), data))
+    open_time = list(map(lambda x: float(x[0]), info))
     open = list(map(lambda x: float(x[1]), info))
     high = list(map(lambda x: float(x[2]), info))
     low = list(map(lambda x: float(x[3]), info))
@@ -311,7 +311,7 @@ def run_logic():
 
     df_reorganized = df[columns_in_order].tail(1)
 
-    signal = model.predict(df_reorganized)
+    signal = model.predict(df_reorganized)[0]
 
     print('Sinal: {}'.format(signal))
 
