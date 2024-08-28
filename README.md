@@ -1,0 +1,2 @@
+- ## Analyzing crypto strategies
+- ## Creating socket to connect your binance account and your strategy
